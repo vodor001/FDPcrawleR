@@ -68,6 +68,32 @@ source("crawl_fdp.R")
 result_active <- crawl_fdp(fdp_list = fdp_active_list)
 result_inactive <- crawl_fdp(fdp_list = fdp_inactive_list)
 
+#==========================TABLE=======================
+source("fdp_layers_table.R")
+
+# === Build per-FDP metadata-layer tables ===
+
+active_id_url <- fdp_active %>%
+  transmute(id = uuid, url = clientUrl)
+
+inactive_id_url <- fdp_inactive %>%
+  transmute(id = uuid, url = clientUrl)
+
+layers_active <- build_fdp_layer_table(
+  fdp_id_url_df = active_id_url,
+  connections   = result_active$connections,
+  status_label  = "ACTIVE"
+)
+
+layers_inactive <- build_fdp_layer_table(
+  fdp_id_url_df = inactive_id_url,
+  connections   = result_inactive$connections,
+  status_label  = "INACTIVE"
+)
+
+layers_merged <- merge_layer_runs(layers_active, layers_inactive)
+
+
 #4A=============================================
 
 source("count_fdp.R")
@@ -286,4 +312,15 @@ fig <- plot_ly(
 )
 
 fig
+
+#--------------exploration
+#FDPs with catalog but NO dataset
+layers_merged %>%
+filter(has_catalog, !has_dataset)%>% 
+  select(url)
+
+layers_merged %>%
+  filter(has_dataset, !has_distribution)%>% 
+  select(url)
+
 
