@@ -12,7 +12,7 @@ Results are summarized as a **Sankey diagram** showing metadata depth across FDP
 Starting from the **ERDERA VP Index**, the tool:
 
 - selects **valid FDPs** (**Active** and **Inactive**)
-- crawls hierarchical **DCAT-2 metadata**  
+- crawls hierarchical metadata
   (**FDP → Catalog → Dataset → Distribution → Data Service**)
 - checks whether **each metadata layer is present**
 - quantifies **metadata completeness** across the FDP ecosystem
