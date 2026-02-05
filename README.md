@@ -22,13 +22,13 @@ The analysis focuses on **metadata presence and structure**, not on **data quali
 
 ---
 
-## **Metadata model (brief)**
+## **Metadata explanation**
 
-FDPs follow a **hierarchical DCAT-2 model**:
+FDPs adopt **DCAT-2** metadata structure:
 
-- **Datasets** represent **abstract data assets**  
-- **Distributions** represent **concrete dataset representations** (files, APIs)  
-- **Data services** provide access via **endpoints** (e.g. Beacon, SPARQL)
+- **Datasets** represent abstract data assets 
+- **Distributions** represent concrete dataset representations** (files, APIs)  
+- **Data services** provide access via endpoints (e.g. Beacon, SPARQL)
 
 Traversal is implemented using **DCAT-2** and **FDP Ontology (FDP-O)** predicates.
 
