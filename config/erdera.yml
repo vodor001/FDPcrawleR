@@ -1,0 +1,40 @@
+profile: erdera
+index_url: https://index.vp.ejprarediseases.org
+states: [ACTIVE, INACTIVE]
+assessments:
+  l1:
+    label: L1
+    endpoint: https://tests.ostrails.eu/community-tests/assess/test/erdera_core_vp_metadata
+    timeout_seconds: 120
+  l2:
+    label: L2
+    endpoint: https://tests.ostrails.eu/community-tests/assess/test/erdera_vp_l2_metadata
+    timeout_seconds: 120
+generalized: false
+timeout_seconds: 10
+max_documents_per_fdp: null
+traversal:
+  extends: standard-fdp-dcat
+  infer_types_from_url: true
+  resource_types:
+    patientregistry:
+      behaves_like: dataset
+      label: PatientRegistry
+    biobank:
+      behaves_like: dataset
+      label: Biobank
+    guideline:
+      behaves_like: dataset
+      label: Guideline
+    guidelines:
+      behaves_like: dataset
+      label: Guideline
+    dataservice1:
+      behaves_like: dataservice
+      label: DataService
+    dataservice2:
+      behaves_like: dataservice
+      label: DataService
+  relationships:
+    - {from: catalog, predicate: "http://www.w3.org/ns/dcat#service", to: dataservice}
+output_dir: results

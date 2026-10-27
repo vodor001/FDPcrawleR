@@ -1,0 +1,394 @@
+---
+title: "FDPCrawleR"
+subtitle: "FAIR Data Point Index landscape"
+output:
+  html_document:
+    theme: flatly
+    toc: true
+    toc_float:
+      collapsed: false
+    toc_depth: 2
+    number_sections: false
+runtime: shiny
+params:
+  snapshot_file: null
+  project_root: null
+---
+
+```{r setup, include=FALSE}
+knitr::opts_knit$set(root.dir = params$project_root)
+setwd(params$project_root)
+source("R/bootstrap.R")
+library(shiny)
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+# rmarkdown removes params after knitting; keep paths for later UI callbacks.
+snapshot_file <- params$snapshot_file
+project_root <- params$project_root
+initial_snapshot <- read_dashboard_snapshot(snapshot_file)
+pack <- reactiveVal(initial_snapshot)
+loaded_from <- reactiveVal(normalizePath(snapshot_file))
+load_error <- reactiveVal("")
+# No checked states means no data, never an implicit ALL.
+state <- reactive({ input$state %||% character() })
+assessments_enabled <- reactive({ length(pack()$config$assessments) > 0L })
+erdera_profile <- reactive({ identical(pack()$config$profile, "erdera") })
+saved_reports <- reactiveVal(setNames(character(), character()))
+
+load_saved_report <- function(path, label) {
+  candidate <- tryCatch({
+    value <- read_dashboard_snapshot(path)
+    # Check the evidence needed by the UI before replacing the working report.
+    for (number in 1:5) shared_summary(value, number)
+    value
+  }, error = function(e) e)
+  if (inherits(candidate, "error")) {
+    load_error(paste("Could not open this report:", conditionMessage(candidate)))
+    return(invisible(FALSE))
+  }
+  load_error("")
+  pack(candidate)
+  loaded_from(label)
+  states <- shared_states(candidate)
+  updateCheckboxGroupInput(session, "state", choices = states, selected = states)
+  updateSelectInput(session, "evidence_key", choices = names(shared_evidence(candidate)), selected = "Index")
+  removeModal()
+  invisible(TRUE)
+}
+observeEvent(input$reload, {
+  load_error("")
+  saved_reports(dashboard_saved_reports(snapshot_file, initial_snapshot$config, project_root))
+  showModal(modalDialog(
+    title = "Load saved results",
+    selectInput("saved_report", "Saved reports", choices = c("Choose a saved run..." = "", saved_reports()), width = "100%"),
+    actionButton("open_saved_report", "Open selected report"),
+    tags$hr(),
+    fileInput("report_upload", "Or choose a report from another folder",
+      buttonLabel = "Browse...", placeholder = "Select report.rds", accept = ".rds", multiple = FALSE, width = "100%"),
+    helpText("Choose report.rds inside a saved run folder. Loading a report does not run a crawl."),
+    div(role = "alert", style = "color: #a32626;", textOutput("load_error")),
+    easyClose = TRUE, footer = modalButton("Cancel"), size = "l"
+  ))
+}, ignoreInit = TRUE)
+output$load_error <- renderText(load_error())
+observeEvent(input$open_saved_report, {
+  path <- input$saved_report
+  if (length(path) != 1L || !path %in% unname(saved_reports())) {
+    load_error("Choose a saved report or use Browse to upload one.")
+  } else load_saved_report(path, path)
+}, ignoreInit = TRUE)
+observeEvent(input$report_upload, {
+  upload <- input$report_upload
+  req(nrow(upload) == 1L)
+  load_saved_report(upload$datapath[[1]], paste("Uploaded:", upload$name[[1]]))
+}, ignoreInit = TRUE)
+dt <- function(frame, truncate = TRUE) {
+  preview <- report_frame(frame)
+  for (column in names(preview)) if (is.character(preview[[column]])) {
+    long <- truncate & !is.na(preview[[column]]) & nchar(preview[[column]]) > 500L
+    preview[[column]][long] <- paste0(substr(preview[[column]][long], 1L, 500L), " ... [download for full text]")
+  }
+  DT::datatable(preview, rownames = FALSE, escape = TRUE, filter = "none",
+    options = list(pageLength = 10, lengthMenu = c(10, 25, 50, 100),
+      scrollX = TRUE, autoWidth = TRUE, order = list(),
+      columnDefs = list(list(targets = "_all", render = DT::JS(
+        "function(data, type) { return data === null && type === 'display' ? 'NA' : data; }")))),
+    class = "stripe hover compact")
+}
+```
+
+```{css, echo=FALSE}
+.main-container {max-width: 1500px;}
+body {color: #26384b; background: #fafcfe;}
+h1, h2, h3 {color: #10264a;}
+h2 {margin-top: 42px; border-top: 1px solid #dde6ef; padding-top: 22px;}
+.subtitle {color: #526c86;}
+.report-cards {display: flex; flex-wrap: wrap; gap: 16px; margin: 22px 0;}
+.report-card {flex: 1; min-width: 170px; padding: 20px; background: #fff;
+  border: 1px solid #dde6ef; border-top: 4px solid #6a9de8; border-radius: 6px;}
+.report-card strong {display: block; font-size: 30px; color: #10264a;}
+.report-card span {color: #526c86;}
+.report-note {padding: 16px 20px; background: #eef4fb; border-left: 4px solid #6a9de8; margin: 18px 0;}
+.report-controls {background: #fff; border: 1px solid #dde6ef; border-radius: 6px; padding: 18px;}
+.shiny-bound-output.recalculating {opacity: 1; transition: none;}
+pre {white-space: pre-wrap; overflow-wrap: anywhere; max-height: 600px; overflow-y: auto;}
+.dataTables_wrapper {margin: 18px 0 24px;}
+#failure-reasons tbody td {white-space: pre-wrap; overflow-wrap: anywhere; vertical-align: top;}
+.btn {margin-bottom: 6px; max-width: 100%; white-space: normal;}
+@media print {.report-controls, .shiny-input-container, .btn {display: none;}}
+```
+
+
+# User manual
+
+Select **Index States** to filter all results and downloads. Unchecking every
+state shows no data. **Load saved results** lets you open another saved run or
+browse your computer for a `report.rds` file. Loading a report selects all its
+Index States and updates the tables, charts, test logs and downloads without a new crawl.
+
+<details>
+<summary>Quick guide to counts and states</summary>
+
+**Overview**
+
+States are supplied by the FDP index **for each index entry**; the dashboard does
+not calculate ACTIVE/INACTIVE status from its own requests. Missing states become
+UNKNOWN. An ACTIVE entry can therefore have a failed crawl.
+
+| Metric | Meaning |
+|---|---|
+| **Distinct FDPs in selected states** | Unique valid FDP URLs across the selection. Surrounding whitespace and trailing slashes are removed before deduplication. |
+| **Selected index entries** | All selected index rows, including duplicate FDP URLs and invalid/missing URLs. |
+| **Entries with invalid/missing URLs** | Selected rows without a valid HTTP(S) FDP URL. |
+| **Each state's FDP count** | Unique valid FDP URLs within that state. The smaller **index entries** number counts its rows. |
+| **FDPs with recorded structural warnings** | FDPs with at least one counted structural warning. |
+
+State **entry counts** sum to Selected index entries. State **FDP counts** may
+overlap because one FDP URL can occur in several states. Use **Distinct FDPs** for
+the overall FDP total.
+
+**Reading counts:** state-prefixed columns belong to that state. `NA` means
+unavailable, unassessed or inapplicable—not zero. All results describe the saved
+crawl; incomplete traversal can hide resources and warnings.
+
+</details>
+
+# Overview
+
+The Overview summarizes the total number of FDPs in the Index, their statuses, alongside the number and type of all structural problems that were recorded.
+
+Selected index entries − Distinct FDPs
+  = invalid/missing-URL entries
+    + repeated occurrences of valid FDP URLs beyond their first occurrence
+
+```{r overview}
+div(class = "report-controls",
+  fluidRow(
+    column(5, checkboxGroupInput("state", "Index States",
+      choices = shared_states(initial_snapshot), selected = shared_states(initial_snapshot), inline = TRUE),
+      helpText("Check one or more states. Tables update automatically. Uncheck all to show no data.")),
+    column(3, actionButton("reload", "Load saved results")),
+    column(4, downloadButton("workbook", "Download selected summary workbook"))
+  )
+)
+output$overview <- renderUI({
+  value <- pack()
+  card <- function(count, label) div(class = "report-card", strong(count), span(label))
+  counts <- dashboard_overview(value, state())
+  state_cards <- lapply(names(counts$states), function(st) {
+    div(class = "report-card", strong(counts$states[[st]]), span(paste(st, "FDPs")),
+      tags$small(paste(counts$state_entries[[st]], "index entries")))
+  })
+  tagList(
+    p(strong(paste("Profile:", value$config$profile)), " | ", value$config$index_url),
+    p(paste("Snapshot saved:", value$saved_at)),
+    p(paste("Loaded report:", loaded_from())),
+    div(class = "report-cards",
+      card(counts$fdps, "Distinct FDPs in selected states"),
+      card(counts$entries, "Selected index entries"),
+      card(counts$invalid_urls, "Entries with invalid/missing URLs"),
+      state_cards,
+      card(counts$warnings,
+        "FDPs with recorded structural warnings")),
+    p("All tables, charts, statistics, evidence, test logs and downloads follow the selected Index States. FDP counts include unsuccessful fetches. State columns retain the original separate counts; shared URLs may occur in more than one state."),
+    if (assessments_enabled()) div(class = "report-note",
+      "This report includes the configured FAIR Champion assessments, test logs and failure reasons. Each test runs independently.")
+  )
+})
+uiOutput("overview")
+output$workbook <- downloadHandler(filename = function() paste0("fdpcrawler_", pack()$config$profile, ".xlsx"),
+  content = function(file) writexl::write_xlsx(shared_workbook(pack(), state()), file))
+```
+
+
+# Metadata processing
+
+## Table 1 — Fetch and parse outcomes
+
+Shows distinct metadata URLs per layer and state.
+
+- **Metadata Layer:** FDP, Catalog, Dataset, Biobank, Distribution, etc.
+- **Fetch successful:** metadata retrieved and successfully parsed as Turtle.
+- **Fetch failed:** retrieval or parsing failed; older snapshots also include
+  requests skipped because of a document limit.
+
+```{r table1}
+output$table1 <- DT::renderDT({ dt(shared_summary(pack(), 1L, state())) })
+DT::DTOutput("table1")
+```
+
+The metadata chart summarizes successful processing.
+
+```{r metadata-chart}
+renderPlot({
+  value <- pack()
+  states <- shared_states(value, state())
+  tables <- setNames(lapply(states, function(st) dashboard_display_summary_one(value, 1L, st)), states)
+  validate(need(length(tables) > 0L && any(vapply(tables, nrow, integer(1)) > 0L),
+    "No crawled metadata for this selection."))
+  layers <- unique(unlist(lapply(tables, function(x) x$`Metadata Layer`)))
+  print(plot_table1(groups = tables, layers = layers) + ggplot2::theme(
+    axis.text.x = ggplot2::element_text(angle = 35, hjust = 1, size = 9),
+    legend.text = ggplot2::element_text(size = 9)
+  ) + ggplot2::guides(fill = ggplot2::guide_legend(ncol = 3, byrow = TRUE)))
+}, height = 650, res = 110)
+```
+
+# Traversal and structure
+
+## Table 2 — Terminal metadata paths
+
+Shows distinct complete URL paths through the metadata hierarchy.
+
+- **Path:** the sequence of layers, such as FDP–Catalog–Dataset–Distribution.
+- **N of times found**, or each state column: number of complete paths of that form.
+
+Counts represent paths, not FDPs. Failed or untraversed paths are excluded.
+
+```{r table2}
+output$table2 <- DT::renderDT({ dt(shared_summary(pack(), 2L, state())) })
+DT::DTOutput("table2")
+```
+
+## Table 3 — Outgoing metadata structure
+
+Shows recorded problem occurrences per **Metadata Layer** and state.
+
+| Column | Meaning |
+|---|---|
+| **LDP-only links** | Parent–child links present in an LDP container but missing the corresponding explicit metadata link. |
+| **Empty LDP containers** | Parent–container pairs with no recorded contents. |
+| **No DCAT or LDP continuation** | Parent documents without a supported outgoing continuation. |
+| **Next-step fetch failed** | Linked child metadata could not be successfully processed. |
+
+Categories can overlap; do not sum them as independent problems. `NA` means the
+indicator was not applicable or assessed for that layer.
+
+```{r table3}
+output$table3 <- DT::renderDT({ dt(shared_summary(pack(), 3L, state())) })
+DT::DTOutput("table3")
+```
+
+## FDP coverage — Sankey diagram
+
+Shows discovered metadata paths, including incomplete branches. Hover over the
+diagram to inspect counts and associated URLs.
+
+```{r sankey}
+chart <- reactive({ shared_sankey(pack(), state()) })
+# Size for the full snapshot, so filtering never remounts or resizes the widget.
+sankey_height <- reactive({ attr(shared_sankey(pack()), "sankey_height") })
+div(style = "max-height: 1100px; overflow-y: auto;", uiOutput("sankey_ui"))
+output$sankey_ui <- renderUI({ plotly::plotlyOutput("sankey", height = paste0(sankey_height(), "px")) })
+output$sankey <- plotly::renderPlotly({
+  value <- chart()
+  value$height <- sankey_height()
+  value$x$layout$height <- value$height
+  # A zero-duration transition lets Plotly.react update the existing plot.
+  plotly::layout(value, transition = list(duration = 0))
+})
+```
+
+# Per-FDP results
+
+```{r table4-heading}
+output$table4_heading <- renderUI({
+  h2(HTML(if (erdera_profile()) "Table 4 &mdash; ERDERA outcomes and structural problems" else
+    if (assessments_enabled()) "Table 4 &mdash; Assessment outcomes and structural problems" else
+    "Table 4 &mdash; Crawl results and structural problems"))
+})
+uiOutput("table4_heading")
+```
+
+Shows saved assessment outcomes and structural warnings for each FDP.
+
+- **FDP:** the FDP URL.
+- **L1/L2 outcome**, when configured: saved assessment result; a request error is
+  not a compliance failure.
+- **Warning type:** structural warning categories or root-fetch/assessment status.
+- **Number of FDPCrawleR warnings:** distinct counted structural occurrences
+  across the FDP and its descendants—not the number of warning categories.
+
+```{r table4}
+output$table4 <- DT::renderDT({ dt(shared_summary(pack(), 4L, state())) })
+DT::DTOutput("table4")
+downloadButton("table4_csv", "Download Table 4 for selected states")
+output$table4_csv <- downloadHandler(filename = function() "table4.csv", content = function(file) {
+  write.csv(shared_summary(pack(), 4L, state()), file, row.names = FALSE, na = "", fileEncoding = "UTF-8")
+})
+```
+
+```{r assessments}
+# These outputs exist for every session, even if its initial report has no tests.
+# The section and selectors are rebuilt only when a different report is loaded.
+output$assessment_section <- renderUI({
+  if (!assessments_enabled()) return(NULL)
+  labels <- shared_test_labels(pack())
+  tagList(
+    h2(if (erdera_profile()) "ERDERA test logs" else "FAIR Champion test logs"),
+    p("Select an FDP and test to inspect the full log, HTTP status and request error."),
+    fluidRow(
+      column(9, selectInput("test_fdp", "FDP", choices = names(pack()$assessments))),
+      column(3, selectInput("test_level", "Test", choices = setNames(names(labels), labels)))
+    ),
+    verbatimTextOutput("test_log"),
+    h2(HTML(if (erdera_profile()) "Table 5 &mdash; ERDERA failure reasons per FDP" else
+      "Table 5 &mdash; Assessment failure reasons per FDP")),
+    p("Each row represents one FDP, with separate reasons for each configured test from the saved test logs."),
+    p("Includes passes, request errors, and missing results. Use Test logs for the full assessment output."),
+    div(id = "failure-reasons", DT::DTOutput("reasons")),
+    downloadButton("table5_csv", "Download Table 5 for selected states")
+  )
+})
+uiOutput("assessment_section")
+observe({
+  choices <- intersect(shared_urls(pack(), state()), names(pack()$assessments))
+  selected <- isolate(input$test_fdp)
+  if (!length(selected) || !selected %in% choices) selected <- if (length(choices)) choices[[1]] else character()
+  updateSelectInput(session, "test_fdp", choices = choices, selected = selected)
+})
+output$test_log <- renderText({
+  if (!assessments_enabled() || !length(input$test_fdp) ||
+      !input$test_fdp %in% shared_urls(pack(), state()) || !length(input$test_level) ||
+      !input$test_level %in% names(shared_test_labels(pack())))
+    return("No assessment recorded for the selected states.")
+  row <- pack()$assessments[[input$test_fdp]][[input$test_level]]
+  if (is.null(row) || !nrow(row)) return("No assessment recorded.")
+  paste(paste("Outcome:", row$outcome), paste("HTTP status:", row$http_status),
+    paste("Assessed:", row$tested_at),
+    if (!is.na(row$error[[1]]) && nzchar(row$error[[1]])) paste("Request error:", row$error) else NULL,
+    report_test_reason(row[1, ]), row$log, sep = "\n\n")
+})
+output$reasons <- DT::renderDT({
+  req(assessments_enabled())
+  dt(shared_table5(pack(), state()), truncate = FALSE)
+})
+output$table5_csv <- downloadHandler(filename = function() "table5.csv", content = function(file) {
+  req(assessments_enabled())
+  write.csv(shared_table5(pack(), state()), file, row.names = FALSE, na = "NA")
+})
+```
+
+# Evidence explorer
+
+Choose an evidence table to inspect underlying records. Common columns identify
+the owner FDP, parent/child URLs, relationship, HTTP status, processing status and
+error. In `additional_relationships`, **not traversed** means that relationship
+was outside the configured traversal rules. The evidence selector is also
+constrained by the global Index State filter.
+
+```{r evidence}
+evidence <- reactive({ shared_evidence(pack(), state()) })
+selectInput("evidence_key", "Evidence table", choices = names(shared_evidence(initial_snapshot)))
+output$evidence_table <- DT::renderDT({
+  req(input$evidence_key)
+  frame <- evidence()[[input$evidence_key]]
+  validate(need(!is.null(frame), "No evidence table available."))
+  dt(frame)
+})
+DT::DTOutput("evidence_table")
+downloadButton("evidence_csv", "Download full evidence table")
+output$evidence_csv <- downloadHandler(filename = function() paste0(input$evidence_key, ".csv"), content = function(file) {
+  write.csv(evidence()[[input$evidence_key]], file, row.names = FALSE, na = "NA")
+})
+```
+

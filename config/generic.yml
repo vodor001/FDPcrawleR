@@ -1,0 +1,11 @@
+profile: generic
+index_url: https://home.fairdatapoint.org
+states: ALL
+assessments: []
+generalized: true
+timeout_seconds: 10
+max_documents_per_fdp: null
+traversal:
+  extends: standard-fdp-dcat
+  infer_types_from_url: false
+output_dir: results

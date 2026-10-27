@@ -1,0 +1,51 @@
+# Minimal runnable publication. New top-level files/directories stay local
+# until explicitly allowed here. Development tools are not published.
+/*
+!/.gitignore
+!/.Rprofile
+!/DESCRIPTION
+!/README.md
+!/renv.lock
+!/R/
+!/scripts/
+!/config/
+!/report/
+!/renv/
+
+# Only installation and runtime launchers; keep scripts/test.R local.
+/scripts/*
+!/scripts/setup.R
+!/scripts/run_pipeline.R
+!/scripts/run_dashboard.R
+
+# Only the current dashboard source.
+/report/*
+!/report/dashboard.Rmd
+
+# Ship renv's bootstrap and settings, never installed libraries or caches.
+/renv/*
+!/renv/.gitignore
+!/renv/activate.R
+!/renv/settings.json
+
+# Local machine/session/editor state, including within allowed directories.
+.DS_Store
+.RData
+.Rhistory
+.Rapp.history
+.Rproj.user/
+.env
+.env.*
+!.env.example
+*.log
+*.tmp
+*.swp
+*~
+
+# Generated R Markdown dependencies and caches inside any allowed folder.
+*_files/
+*_cache/
+
+# Root exclusions keep tests/, docs/, .github/, *.Rproj, results/, Deprecated/,
+# Figures/, Result tables/, .report-library/, exploratory scripts and exports
+# local. Nothing is deleted by these rules.

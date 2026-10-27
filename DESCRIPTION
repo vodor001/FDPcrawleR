@@ -1,0 +1,24 @@
+Package: FDPCrawleR
+Type: Project
+Title: FAIR Data Point Crawling and Profile-Based Reporting
+Version: 0.2.0
+Description: Shared FDP crawling with generic index exploration and optional
+    ERDERA Virtual Platform assessments. Run as a script project.
+Encoding: UTF-8
+Depends: R (>= 4.1.0)
+Imports:
+    dplyr (>= 1.1.0),
+    tidyr,
+    tibble,
+    httr,
+    jsonlite,
+    rdflib,
+    redland,
+    yaml,
+    shiny,
+    rmarkdown,
+    knitr,
+    DT,
+    plotly,
+    ggplot2,
+    writexl

@@ -1,0 +1,28 @@
+# Built-in structural rules. RDF fields such as publisher/license are not children.
+resource_types:
+  fdp:
+    rdf_types: ["https://w3id.org/fdp/fdp-o#FAIRDataPoint"]
+    label: FDP
+  catalog:
+    rdf_types: ["http://www.w3.org/ns/dcat#Catalog"]
+    label: Catalog
+  resource:
+    label: Resource
+  dataset:
+    rdf_types: ["http://www.w3.org/ns/dcat#Dataset"]
+    label: Dataset
+  distribution:
+    rdf_types: ["http://www.w3.org/ns/dcat#Distribution"]
+    label: Distribution
+  dataservice:
+    rdf_types: ["http://www.w3.org/ns/dcat#DataService"]
+    label: DataService
+    terminal: true
+relationships:
+  - {from: fdp, predicate: "https://w3id.org/fdp/fdp-o#metadataCatalog", to: catalog}
+  - {from: catalog, predicate: "http://purl.org/dc/terms/hasPart", to: resource}
+  - {from: catalog, predicate: "http://www.w3.org/ns/dcat#dataset", to: dataset}
+  - {from: catalog, predicate: "http://www.w3.org/ns/dcat#service", to: dataservice}
+  - {from: dataset, predicate: "http://www.w3.org/ns/dcat#distribution", to: distribution}
+  - {from: dataset, predicate: "http://www.w3.org/ns/dcat#accessService", to: dataservice}
+  - {from: distribution, predicate: "http://www.w3.org/ns/dcat#accessService", to: dataservice}
